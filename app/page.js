@@ -2,23 +2,48 @@
 import { useEffect, useState } from "react";
 
 export default function Home() {
+  const [liveMatches, setLiveMatches] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("https://free-api-live-football-data.p.rapidapi.com/football-current-live", {
-      headers: {
-        "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com",
-        "x-rapidapi-key": process.env.NEXT_PUBLIC_RAPIDAPI_KEY,
-      },
-    })
+    fetch("/api/fixtures")
       .then((res) => res.json())
       .then((data) => {
-        setFixtures(data.response || []);
+        setLiveMatches(data.live || []);
+        setFixtures(data.fixtures || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const parseMatchTime = (match) => {
+    try {
+      const date = match.date;
+      const time = match.time;
+      if (!date || !time) return { date: "TBC", time: "TBC" };
+      const offsetMatch = time.match(/UTC([+-]\d+)/);
+      const offset = offsetMatch ? parseInt(offsetMatch[1]) : 0;
+      const timePart = time.split(" ")[0];
+      const [hours, mins] = timePart.split(":").map(Number);
+      const utcHours = hours - offset;
+      const utcDate = new Date(`${date}T${String(utcHours).padStart(2,"0")}:${String(mins).padStart(2,"0")}:00Z`);
+      const istTime = utcDate.toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const istDate = utcDate.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+      return { date: istDate, time: istTime };
+    } catch {
+      return { date: "TBC", time: "TBC" };
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
@@ -54,43 +79,58 @@ export default function Home() {
         </p>
       </section>
 
+      {liveMatches.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 pb-12">
+          <h2 className="text-3xl font-bold mb-6">Live Now</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            {liveMatches.map((match, i) => (
+              <div key={i} className="bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/30 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                  <span className="text-red-400 text-xs font-semibold">LIVE</span>
+                  <span className="text-slate-400 text-xs ml-auto">{match.minute}'</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold">{match.home}</span>
+                  <span className="text-2xl font-bold px-4">
+                    {match.score || `${match.home_score ?? 0} - ${match.away_score ?? 0}`}
+                  </span>
+                  <span className="font-bold">{match.away}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="max-w-7xl mx-auto px-6 pb-12">
         <h2 className="text-3xl font-bold mb-6">
-          Live Matches <span className="text-slate-500 text-base">(IST)</span>
+          Upcoming Fixtures <span className="text-slate-500 text-base">(IST)</span>
         </h2>
         {loading ? (
-          <div className="text-slate-400 text-center py-12">Loading live matches...</div>
+          <div className="text-slate-400 text-center py-12">Loading fixtures...</div>
         ) : fixtures.length === 0 ? (
           <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-8 text-center">
             <div className="text-4xl mb-3">⚽</div>
-            <div className="text-slate-400">No live matches right now. Check back on match day!</div>
+            <div className="text-slate-400">No matches scheduled. Check back soon!</div>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {fixtures.map((match, i) => {
-              const utcTime = new Date(match.fixture?.date);
-              const istTime = utcTime.toLocaleTimeString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                hour: "2-digit",
-                minute: "2-digit",
-              });
+              const { date: istDate, time: istTime } = parseMatchTime(match);
               return (
                 <div key={i} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 hover:border-green-500/50 transition">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                    <span className="text-red-400 text-xs font-semibold">LIVE</span>
-                    <span className="text-slate-500 text-xs ml-auto">{istTime} IST</span>
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs text-slate-400">{istDate}</span>
+                    <span className="text-xs text-green-400">{istTime} IST</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-lg">{match.teams?.home?.name}</span>
-                    <div className="text-center px-4">
-                      <div className="text-2xl font-bold">
-                        {match.goals?.home ?? 0} - {match.goals?.away ?? 0}
-                      </div>
-                      <div className="text-xs text-slate-400">{match.fixture?.status?.elapsed}'</div>
-                    </div>
-                    <span className="font-bold text-lg">{match.teams?.away?.name}</span>
+                    <span className="font-semibold">{match.home}</span>
+                    <span className="text-slate-500 text-sm px-2">vs</span>
+                    <span className="font-semibold">{match.away}</span>
                   </div>
+                  <div className="text-xs text-slate-500 mt-2">{match.venue}</div>
+                  <div className="text-xs text-blue-400 mt-1">{match.group} — {match.round}</div>
                 </div>
               );
             })}
@@ -103,9 +143,10 @@ export default function Home() {
           <h2 className="text-3xl font-bold mb-6">Top Headlines</h2>
           <div className="space-y-3">
             {[
-              "Messi confirms this is his final World Cup",
-              "Host cities announce ticket release dates",
-              "VAR rules updated for the 2026 tournament",
+              "Germany fan cycles 26,000km to get to Houston",
+              "Brazil fans take over NYC ahead of their opener",
+              "Ronaldo arrives for Portugal World Cup campaign",
+              "Australia shock Turkey in Group H opener",
               "India broadcast deal confirmed with JioCinema",
             ].map((title, i) => (
               <div key={i} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 hover:border-green-500/50 transition cursor-pointer">
